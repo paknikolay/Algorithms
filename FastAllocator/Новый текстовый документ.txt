@@ -1,0 +1,193 @@
+#pragma once
+#include <stack>
+#include <set>
+#include "fixedAllocator.h"
+#include <algorithm>
+using std::stack;
+using std::set;
+
+struct Segment2 {
+    void *ptr;
+    size_t size;
+    ~Segment2(){};
+    Segment2(void *p, size_t s) {
+        ptr = p;
+        size = s;
+    }
+
+};
+struct Segment1 {
+    ~Segment1(){};
+    void *ptr;
+    size_t size;
+
+    Segment1(void *p, size_t s) {
+        ptr = p;
+        size = s;
+    }
+
+    Segment1(Segment2 s2) {
+        ptr = s2.ptr;
+        size = s2.size;
+    }
+
+
+};
+bool operator<(Segment1 s1, Segment1 s2) {
+    return s1.size == s2.size ? s1.ptr < s2.ptr : s1.size > s2.size;
+};
+
+bool operator<(Segment2 s1, Segment2 s2) {
+    return s1.ptr < s2.ptr;
+};
+
+
+template <typename T>
+class FastAllocator {
+public:
+    typedef size_t     size_type;
+    typedef ptrdiff_t  difference_type;
+    typedef T*       pointer;
+    typedef const T* const_pointer;
+    typedef T&       reference;
+    typedef const T& const_reference;
+    typedef T        value_type;
+
+
+    FastAllocator() {
+        size = std::max(sizeof(T), DEFAULTSIZE);
+    }
+
+    ~FastAllocator() {
+        void *ptr;
+        while (!allBlocks.empty()) {
+            ptr = allBlocks.top();
+            allBlocks.pop();
+            free (ptr);
+        }
+    }
+
+    pointer allocate(int n) {
+        n = n * sizeof(T);
+        switch (n) {
+            case 0:
+                return nullptr;
+            case 1:
+                return static_cast<T *>(allocator1.allocate());
+            case 4:
+                return static_cast<T *>(allocator4.allocate());
+            case 8:
+                return static_cast<T *>(allocator8.allocate());
+            default:
+                return getBlock(n);
+        }
+    }
+
+    void deallocate(T *ptr, size_t n) {
+        switch (n) {
+            case 0:
+                return;
+            case 1:
+                allocator1.deallocate(ptr);
+                break;
+            case 4:
+                allocator4.deallocate(ptr);
+                break;
+            case 8:
+                allocator8.deallocate(ptr);
+                break;
+            default:
+                deleteBlock(ptr, n);
+                break;
+        }
+    }
+
+    template<typename X, typename ... Args>
+    void construct(X *ptr, Args &&... args) {
+        *ptr = X(std::forward<Args>(args)...);
+    }
+
+    template<typename X>
+    void destroy(X *ptr) {
+        ptr->~X();
+    }
+
+private:
+    const size_t DEFAULTSIZE = 16;
+    FixedAllocator<8> allocator8;
+    FixedAllocator<4> allocator4;
+    FixedAllocator<1> allocator1;
+    stack<void *> allBlocks;
+    size_t size;
+
+
+
+
+    set<Segment1> freeBlocksSetSize;
+    set<Segment2> freeBlocksSetForMerge;
+
+    void checkIfHasBlockAndAddIfDoesNotHave(int n) {
+        if (freeBlocksSetSize.empty() || freeBlocksSetSize.begin()->size < n)
+            fillFreeBlocks(n);
+    }
+
+    pointer getBlock(size_t n) {
+        checkIfHasBlockAndAddIfDoesNotHave(n);
+        Segment1 s = *freeBlocksSetSize.begin();
+        freeBlocksSetForMerge.erase(*freeBlocksSetForMerge.begin());
+        freeBlocksSetSize.erase(s);
+        pointrt ptr = (pointer)s.ptr + n;
+        size_t dif = s.size - n;
+        switch (dif) {
+            case 0:
+                break;
+            case 1:
+                allocator1.deallocate(ptr + n);
+                break;
+            case 4:
+                allocator1.deallocate(ptr + n);
+                break;
+            case 8:
+                allocator1.deallocate(ptr + n);
+                break;
+            default:
+                freeBlocksSetSize.insert(Segment1(s.ptr + n, dif));
+                freeBlocksSetForMerge.insert(Segment2(s.ptr + n, dif));
+                break;
+        }
+        return ptr;
+    }
+
+    void deleteBlock(pointer ptr, size_t n) {
+        Segment2 m((void*)ptr, n);
+
+        set<Segment2>::iterator i = freeBlocksSetForMerge.lower_bound(Segment2((void*)pointer, n));
+        if (i != freeBlocksSetForMerge.end() && (i->pointer + 1 == (void*)pointer)) {
+            freeBlocksSetForMerge.erase(*i);
+            freeBlocksSetSize.erase(*i);
+            m.size += i->size;
+            m.pointer = i->pointer;
+        }
+
+        i = freeBlocksSetForMerge.upper_bound(Segment2((void*)pointer + n, n));
+        if (i != freeBlocksSetForMerge.end() && ((void*)pointer + n == i->pointer)) {
+            freeBlocksSetForMerge.erase(*i);
+            freeBlocksSetSize.erase(*i);
+            m.size += i->size;
+        }
+        freeBlocksSetSize.insert(m);
+        freeBlocksSetForMerge.insert(m);
+
+    }
+
+    void fillFreeBlocks(size_t requiredSize) { // if requiredSize >> size -> size = requiredSize * 2)
+        if (requiredSize > size)
+            size = requiredSize;
+        size *= 2;
+        T *pointer = (T *) malloc(size);
+        allBlocks.push(pointer);
+        freeBlocksSetSize.insert(Segment1(pointer, size));
+        freeBlocksSetForMerge.insert(Segment2(pointer, size));
+
+    }
+};

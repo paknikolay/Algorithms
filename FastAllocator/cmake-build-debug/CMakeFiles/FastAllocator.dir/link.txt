@@ -1,3 +1,0 @@
-"C:\Program Files\JetBrains\CLion 2017.1.1\bin\cmake\bin\cmake.exe" -E remove -f CMakeFiles\FastAllocator.dir/objects.a
-C:\PROGRA~1\mingw-w64\x86_64-6.2.0-win32-seh-rt_v5-rev0\mingw64\bin\ar.exe cr CMakeFiles\FastAllocator.dir/objects.a @CMakeFiles\FastAllocator.dir\objects1.rsp
-C:\PROGRA~1\mingw-w64\x86_64-6.2.0-win32-seh-rt_v5-rev0\mingw64\bin\g++.exe  -g   -Wl,--whole-archive CMakeFiles\FastAllocator.dir/objects.a -Wl,--no-whole-archive  -o FastAllocator.exe -Wl,--out-implib,libFastAllocator.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\FastAllocator.dir\linklibs.rsp
